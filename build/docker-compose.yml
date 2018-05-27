@@ -1,15 +1,16 @@
 version: '3'
 
 services:
+  gstreamer-debian:
+    build: 
+      context: ./gstreamer
+      dockerfile: ./debian.Dockerfile
+    image: maxmcd/gstreamer:debian
   gstreamer:
-    build: ./gstreamer
-    image: maxmcd/gstreamer:latest
-    ports:
-      - 8554:8554
-      - 32968:32968/udp
-      - 32969:32969/udp
-      - 32970:32970/udp
-      - 32971:32971/udp
+    build: 
+      context: ./gstreamer
+      dockerfile: ./alpine.Dockerfile
+    image: maxmcd/gstreamer:alpine
   janus:
     build: ./janus
     image: maxmcd/janus:latest
