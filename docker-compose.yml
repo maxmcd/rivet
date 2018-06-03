@@ -1,0 +1,17 @@
+version: '3'
+
+services:
+  rivet:
+    build: ./rivet
+    ports:
+      - 8554:8554
+      - 8883:8883
+    volumes:
+      - ./rivet/src/:/opt/src/
+    command: sleep 100000
+  browser-debug:
+    build: ./browser-debug
+    ports:
+      - 8080:80
+    volumes: 
+      - ./browser-debug:/usr/share/nginx/html
