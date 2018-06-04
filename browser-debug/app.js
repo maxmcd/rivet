@@ -7,11 +7,17 @@ var rtc_configuration = {
 };
 
 
+function onRemoteStreamAdded(event) {
+    videoTracks = event.stream.getVideoTracks();
+    audioTracks = event.stream.getAudioTracks();
+}
+
 ws_conn = new WebSocket("ws://localhost:8883");
 ws_conn.addEventListener("open", event => {
     console.log("ws connection open");
 
     pc = new RTCPeerConnection(rtc_configuration);
+    pc.onaddstream = onRemoteStreamAdded;
 
     local_stream_promise = navigator.mediaDevices
         .getUserMedia({ video: true, audio: true })
@@ -20,10 +26,13 @@ ws_conn.addEventListener("open", event => {
             pc.addStream(stream);
             return stream;
         })
-        .catch((e) => {console.log(`Error! ${e}`)});
+        .catch(e => {
+            console.log(`Error! ${e}`);
+        });
+    console.log(local_stream_promise);
 
     pc.onicecandidate = event => {
-        console.log('ice candidate')
+        console.log("ice candidate");
         if (event.candidate == null) {
             console.log("ICE Candidate was null, done");
             return;
@@ -45,17 +54,30 @@ ws_conn.addEventListener("message", e => {
                 console.log("Remote SDP set");
                 if (sdp.type != "offer") return;
                 console.log("Got SDP offer");
+                console.log(local_stream_promise);
                 local_stream_promise
                     .then(stream => {
                         console.log("Got local stream, creating answer");
                         pc
                             .createAnswer()
                             .then(onLocalDescription)
-                            .catch((e) => {console.log(`Error! ${e}`)});
+                            .catch(e => {
+                                console.log(`Error! ${e}`);
+                            });
                     })
-                    .catch((e) => {console.log(`Error! ${e}`)});
+                    .catch(e => {
+                        console.log(`Error! ${e}`);
+                    });
             })
-            .catch((e) => {console.log(`Error! ${e}`)});
+            .catch(e => {
+                console.log(`Error! ${e}`);
+            });
+    }
+    if (msg.ice) {
+        var candidate = new RTCIceCandidate(msg.ice);
+        pc.addIceCandidate(candidate).catch(e => {
+            console.log(`Error! ${e}`);
+        });
     }
 });
 
