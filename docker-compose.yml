@@ -12,6 +12,6 @@ services:
   browser-debug:
     build: ./browser-debug
     ports:
-      - 8080:80
+      - 8081:80
     volumes: 
       - ./browser-debug:/usr/share/nginx/html

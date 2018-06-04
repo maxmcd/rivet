@@ -5,12 +5,15 @@ authors = ["maxmcd <max.t.mcdonnell@gmail.com>"]
 
 [dependencies]
 glib = { git = "https://github.com/gtk-rs/glib" }
-gstreamer = { git = "https://github.com/sdroege/gstreamer-rs", features = ["v1_14"] }
-gstreamer-rtsp = { git = "https://github.com/sdroege/gstreamer-rs" }
-gstreamer-rtsp-server = { git = "https://github.com/sdroege/gstreamer-rs" }
-gstreamer-sdp = { git = "https://github.com/sdroege/gstreamer-rs" }
+gobject-sys = { git = "https://github.com/gtk-rs/sys" }
+gstreamer = { git = "https://github.com/sdroege/gstreamer-rs", rev="b6a568679834dab563243671a0a46125df8257f3", features = ["v1_14"] }
+gstreamer-sys = { git = "https://github.com/sdroege/gstreamer-sys" }
+gstreamer-rtsp = { git = "https://github.com/sdroege/gstreamer-rs", rev="b6a568679834dab563243671a0a46125df8257f3" }
+gstreamer-rtsp-server = { git = "https://github.com/sdroege/gstreamer-rs", rev="b6a568679834dab563243671a0a46125df8257f3" }
+gstreamer-sdp = { git = "https://github.com/sdroege/gstreamer-rs", rev="b6a568679834dab563243671a0a46125df8257f3" }
 gstreamer-sdp-sys = { git = "https://github.com/sdroege/gstreamer-sys" }
-gstreamer-webrtc = { git = "https://github.com/sdroege/gstreamer-rs" }
+gstreamer-webrtc = { git = "https://github.com/sdroege/gstreamer-rs", rev="b6a568679834dab563243671a0a46125df8257f3" }
+gstreamer-webrtc-sys = { git = "https://github.com/sdroege/gstreamer-sys" }
 rand = "0.5"
 serde_json = "1.0.19"
 ws = "0.7.6"
