@@ -1,3 +1,4 @@
+use error::Error;
 use glib;
 use glib::translate::from_glib_full;
 use glib::translate::ToGlibPtr;
@@ -12,32 +13,33 @@ use ws;
 fn webrtc_on_incoming_decodebin_stream(values: &[glib::Value], pipe: &gst::Element) {
     let pad = values[1].get::<gst::Pad>().expect("Invalid argument");
     if !pad.has_current_caps() {
-        println!("Pad {:?} has no caps, can't do anything, ignoring", pad);
+        debug!("Pad {:?} has no caps, can't do anything, ignoring", pad);
     }
 
     let caps = pad.get_current_caps().unwrap();
     let name = caps.get_structure(0).unwrap().get_name();
-    println!("{:?}", name);
-    println!("{:?}", caps);
+    debug!("{:?}", name);
+    debug!("{:?}", caps);
     let pipe_bin = pipe.clone().dynamic_cast::<gst::Bin>().unwrap();
     let q = gst::ElementFactory::make("identity", None).unwrap();
     // q.set_property_from_str("leaky", "downstream");
-    q.set_property_from_str("dump", "true");
+    q.set_property_from_str("dump", "false");
     pipe_bin.add_many(&[&q]).unwrap();
     let qpad = q.get_static_pad("sink").unwrap();
     let ret = pad.link(&qpad);
     assert_eq!(ret, gst::PadLinkReturn::Ok);
+    debug!("Pads linked!");
     // if name.starts_with("video") {
     //     // handle_media_stream(&pad, &pipe, "rtpvp8depay", "rtpvp8pay");
     // } else if name.starts_with("audio") {
     //     // handle_media_stream(&pad, &pipe, "audioconvert", "autoaudiosink");
     // } else {
-    //     println!("Unknown pad {:?}, ignoring", pad);
+    //     debug!("Unknown pad {:?}, ignoring", pad);
     // }
 }
 
 fn webrtc_on_incoming_stream(values: &[glib::Value], pipe: &gst::Element) {
-    println!("pad-added");
+    debug!("pad-added");
     let webrtc = values[0].get::<gst::Element>().expect("Invalid argument");
     let decodebin = gst::ElementFactory::make("decodebin", None).unwrap();
     let pipe_clone = pipe.clone();
@@ -57,14 +59,14 @@ fn webrtc_on_incoming_stream(values: &[glib::Value], pipe: &gst::Element) {
 }
 
 fn webrtc_on_offer_created(promise: &gst::Promise, webrtc: gst::Element, out: ws::Sender) {
-    println!("create-offer callback");
+    debug!("create-offer callback");
     let reply = promise.get_reply().unwrap();
     let offer = reply
         .get_value("offer")
         .unwrap()
         .get::<gst_webrtc::WebRTCSessionDescription>()
         .expect("Invalid argument");
-    println!("offer {}", sdp_message_as_text(offer.clone()).unwrap());
+    debug!("offer {}", sdp_message_as_text(offer.clone()).unwrap());
     webrtc
         .emit("set-local-description", &[&offer, &None::<gst::Promise>])
         .unwrap();
@@ -84,12 +86,12 @@ fn webrtc_send_ice_candidate_message(values: &[glib::Value], out: &ws::Sender) {
             "sdpMLineIndex": mlineindex,
         }
     });
-    println!("Sending {}", message.to_string());
+    debug!("Sending {}", message.to_string());
     out.send(message.to_string()).unwrap();
 }
 
 fn webrtc_on_negotiation_needed(values: &[glib::Value], out: &ws::Sender) {
-    println!("on-negotiation-needed {:?}", values);
+    debug!("on-negotiation-needed {:?}", values);
     let webrtc = values[0].get::<gst::Element>().expect("Invalid argument");
     let webrtc_clone = webrtc.clone();
     let out_clone = out.clone();
@@ -100,7 +102,7 @@ fn webrtc_on_negotiation_needed(values: &[glib::Value], out: &ws::Sender) {
     webrtc.emit("create-offer", &[&options, &promise]).unwrap();
 }
 
-pub fn set_up_webrtc(out: &ws::Sender) -> gst::Element {
+pub fn set_up_webrtc(out: &ws::Sender) -> Result<gst::Element, Error> {
     let pipeline = gst::Pipeline::new("pipeline");
     let webrtc = gst::ElementFactory::make("webrtcbin", "webrtcsource").unwrap();
     webrtc.set_property_from_str("stun-server", "stun://stun.l.google.com:19302");
@@ -116,8 +118,7 @@ pub fn set_up_webrtc(out: &ws::Sender) -> gst::Element {
                     "encoding-name=VP8",
                     "payload=96",
                     "clock-rate=90000",
-                ].join(","))
-                    .unwrap(),
+                ].join(","))?,
             ],
         )
         .unwrap();
@@ -133,37 +134,27 @@ pub fn set_up_webrtc(out: &ws::Sender) -> gst::Element {
                     "payload=97",
                     "clock-rate=48000",
                     "encoding-params=(string)2",
-                ].join(","))
-                    .unwrap(),
+                ].join(","))?,
             ],
         )
         .unwrap();
     let out_clone = out.clone();
-    webrtc
-        .connect("on-negotiation-needed", false, move |values| {
-            webrtc_on_negotiation_needed(values, &out_clone);
-            None
-        })
-        .unwrap();
+    webrtc.connect("on-negotiation-needed", false, move |values| {
+        webrtc_on_negotiation_needed(values, &out_clone);
+        None
+    })?;
     let out_clone = out.clone();
-    webrtc
-        .connect("on-ice-candidate", false, move |values| {
-            webrtc_send_ice_candidate_message(values, &out_clone);
-            None
-        })
-        .unwrap();
+    webrtc.connect("on-ice-candidate", false, move |values| {
+        webrtc_send_ice_candidate_message(values, &out_clone);
+        None
+    })?;
     let pipeline_clone = pipeline.clone().dynamic_cast::<gst::Element>().unwrap();
-    webrtc
-        .connect("pad-added", false, move |values| {
-            webrtc_on_incoming_stream(values, &pipeline_clone);
-            None
-        })
-        .unwrap();
-    pipeline
-        .set_state(gst::State::Playing)
-        .into_result()
-        .unwrap();
-    webrtc.clone()
+    webrtc.connect("pad-added", false, move |values| {
+        webrtc_on_incoming_stream(values, &pipeline_clone);
+        None
+    })?;
+    pipeline.set_state(gst::State::Playing).into_result()?;
+    Ok(webrtc.clone())
 }
 
 fn sdp_message_as_text(offer: gst_webrtc::WebRTCSessionDescription) -> Option<String> {

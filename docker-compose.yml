@@ -8,6 +8,7 @@ services:
       - 8883:8883
     volumes:
       - ./rivet/src/:/opt/src/
+      - ./rivet/Cargo.toml:/opt/Cargo.toml
     command: sleep 100000
   browser-debug:
     build: ./browser-debug

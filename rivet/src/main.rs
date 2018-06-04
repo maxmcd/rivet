@@ -11,11 +11,16 @@ extern crate gstreamer_webrtc_sys as gst_webrtc_sys;
 #[macro_use]
 extern crate serde_json;
 extern crate ws;
+#[macro_use]
+extern crate log;
+extern crate env_logger;
 
+mod error;
 mod signalling;
 mod webrtc;
 
 fn main() {
+    env_logger::init();
     gst::init().unwrap();
     signalling::start_server();
 

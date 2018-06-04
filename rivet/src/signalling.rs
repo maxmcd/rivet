@@ -5,22 +5,21 @@ use gst_webrtc;
 use serde_json;
 use webrtc::set_up_webrtc;
 use ws;
-use ws::{listen, CloseCode, Handler, Handshake, Message, Result};
-
+use ws::{CloseCode, Handler, Handshake, Message, Result};
 struct WsServer {
-    _out: ws::Sender,
-    webrtc: gst::Element,
+    out: ws::Sender,
+    webrtc: Option<gst::Element>,
 }
 
 fn ws_on_sdp(webrtc: &gst::Element, json_msg: &serde_json::Value) {
     if !json_msg.get("type").is_some() {
-        println!("ERROR: received SDP without 'type'");
+        debug!("ERROR: received SDP without 'type'");
         return;
     }
     let sdptype = &json_msg["type"];
     assert_eq!(sdptype, "answer");
     let text = &json_msg["sdp"];
-    print!("Received answer:\n{}\n", text.as_str().unwrap());
+    debug!("Received answer:\n{}\n", text.as_str().unwrap());
 
     let ret = gst_sdp::SDPMessage::parse_buffer(text.as_str().unwrap().as_bytes()).unwrap();
     let answer = gst_webrtc::WebRTCSessionDescription::new(gst_webrtc::WebRTCSDPType::Answer, ret);
@@ -39,39 +38,45 @@ fn ws_on_ice(webrtc: &gst::Element, json_msg: &serde_json::Value) {
 
 impl Handler for WsServer {
     fn on_open(&mut self, hs: Handshake) -> Result<()> {
-        println!("New connection from {}", hs.peer_addr.unwrap());
-
+        self.webrtc = match set_up_webrtc(&self.out) {
+            Ok(webrtc) => Some(webrtc),
+            Err(err) => {
+                error!("Failed to set up webrtc {:?}, closing ws connection", err);
+                self.out.close(CloseCode::Normal).unwrap();
+                return Ok(());
+            }
+        };
+        info!("New connection from {}", hs.peer_addr.unwrap());
         Ok(())
     }
     fn on_message(&mut self, msg: Message) -> Result<()> {
         let json_msg: serde_json::Value = serde_json::from_str(&msg.as_text().unwrap()).unwrap();
         if json_msg.get("sdp").is_some() {
-            ws_on_sdp(&self.webrtc, &json_msg);
+            ws_on_sdp(self.webrtc.as_ref().unwrap(), &json_msg);
         };
         if json_msg.get("ice").is_some() {
-            println!("adding ice {}", json_msg);
-            ws_on_ice(&self.webrtc, &json_msg);
+            debug!("adding ice {}", json_msg);
+            ws_on_ice(self.webrtc.as_ref().unwrap(), &json_msg);
         }
         Ok(())
     }
 
     fn on_close(&mut self, code: CloseCode, reason: &str) {
         match code {
-            CloseCode::Normal => println!("The client is done with the connection."),
-            CloseCode::Away => println!("The client is leaving the site."),
-            _ => println!("The client encountered an error: {}", reason),
+            CloseCode::Normal => debug!("The client is done with the connection."),
+            CloseCode::Away => debug!("The client is leaving the site."),
+            _ => debug!("The client encountered an error: {}", reason),
         }
     }
 }
 
 pub fn start_server() {
     let host = "0.0.0.0:8883";
-    println!("Ws Listening at {}", host);
-    listen(host, |out| {
-        let webrtc = set_up_webrtc(&out);
-        WsServer {
-            _out: out,
-            webrtc: webrtc,
-        }
+    info!("Ws Listening at {}", host);
+    let ws = ws::WebSocket::new(|out| WsServer {
+        out: out,
+        webrtc: None,
     }).unwrap();
+    // blocks
+    ws.listen(host).unwrap();
 }

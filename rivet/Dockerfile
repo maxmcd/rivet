@@ -11,5 +11,7 @@ RUN cargo install
 RUN cargo build
 COPY . /opt/
 
+ENV RUST_LOG=rust_test=info
+
 CMD cargo run
 
