@@ -16,6 +16,7 @@ impl From<glib::Error> for Error {
         Error::GlibError(error)
     }
 }
+
 impl From<io::Error> for Error {
     fn from(error: io::Error) -> Self {
         Error::IoError(error)

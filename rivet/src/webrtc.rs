@@ -1,14 +1,46 @@
 use error::Error;
 use glib;
-use glib::translate::from_glib_full;
-use glib::translate::ToGlibPtr;
 use glib::Cast;
 use gst;
-use gst_rtsp_server::prelude::*;
-use gst_sdp_sys;
+use gst::prelude::*;
 use gst_webrtc;
 use std::str::FromStr;
 use ws;
+
+fn handle_media_stream(pad: &gst::Pad, pipe: &gst::Element, convert_name: &str, sink_name: &str) {
+    println!(
+        "Trying to handle stream with {} ! {}",
+        convert_name, sink_name,
+    );
+    let q = gst::ElementFactory::make("queue", None).unwrap();
+    let conv = gst::ElementFactory::make(convert_name, None).unwrap();
+    let sink = gst::ElementFactory::make(sink_name, None).unwrap();
+
+    // let q = gst::ElementFactory::make("identity", None).unwrap();
+    // q.set_property_from_str("leaky", "downstream");
+    sink.set_property_from_str("dump", "false");
+
+    let pipe_bin = pipe.clone().dynamic_cast::<gst::Bin>().unwrap();
+
+    if convert_name == "audioconvert" {
+        let resample = gst::ElementFactory::make("audioresample", None).unwrap();
+        pipe_bin.add_many(&[&q, &conv, &resample, &sink]).unwrap();
+        q.sync_state_with_parent().unwrap();
+        conv.sync_state_with_parent().unwrap();
+        resample.sync_state_with_parent().unwrap();
+        sink.sync_state_with_parent().unwrap();
+        gst::Element::link_many(&[&q, &conv, &resample, &sink]).unwrap();
+    } else {
+        pipe_bin.add_many(&[&q, &conv, &sink]).unwrap();
+        q.sync_state_with_parent().unwrap();
+        conv.sync_state_with_parent().unwrap();
+        sink.sync_state_with_parent().unwrap();
+        gst::Element::link_many(&[&q, &conv, &sink]).unwrap();
+    }
+    let qpad = q.get_static_pad("sink").unwrap();
+    let ret = pad.link(&qpad);
+    assert_eq!(ret, gst::PadLinkReturn::Ok);
+}
 
 fn webrtc_on_incoming_decodebin_stream(values: &[glib::Value], pipe: &gst::Element) {
     let pad = values[1].get::<gst::Pad>().expect("Invalid argument");
@@ -20,22 +52,22 @@ fn webrtc_on_incoming_decodebin_stream(values: &[glib::Value], pipe: &gst::Eleme
     let name = caps.get_structure(0).unwrap().get_name();
     debug!("{:?}", name);
     debug!("{:?}", caps);
-    let pipe_bin = pipe.clone().dynamic_cast::<gst::Bin>().unwrap();
-    let q = gst::ElementFactory::make("identity", None).unwrap();
-    // q.set_property_from_str("leaky", "downstream");
-    q.set_property_from_str("dump", "false");
-    pipe_bin.add_many(&[&q]).unwrap();
-    let qpad = q.get_static_pad("sink").unwrap();
-    let ret = pad.link(&qpad);
-    assert_eq!(ret, gst::PadLinkReturn::Ok);
-    debug!("Pads linked!");
-    // if name.starts_with("video") {
-    //     // handle_media_stream(&pad, &pipe, "rtpvp8depay", "rtpvp8pay");
-    // } else if name.starts_with("audio") {
-    //     // handle_media_stream(&pad, &pipe, "audioconvert", "autoaudiosink");
-    // } else {
-    //     debug!("Unknown pad {:?}, ignoring", pad);
-    // }
+    // let pipe_bin = pipe.clone().dynamic_cast::<gst::Bin>().unwrap();
+    // let q = gst::ElementFactory::make("identity", None).unwrap();
+    // // q.set_property_from_str("leaky", "downstream");
+    // q.set_property_from_str("dump", "false");
+    // pipe_bin.add_many(&[&q]).unwrap();
+    // let qpad = q.get_static_pad("sink").unwrap();
+    // let ret = pad.link(&qpad);
+    // assert_eq!(ret, gst::PadLinkReturn::Ok);
+    // debug!("Pads linked!");
+    if name.starts_with("video") {
+        handle_media_stream(&pad, &pipe, "videoconvert", "autovideosink");
+    } else if name.starts_with("audio") {
+        handle_media_stream(&pad, &pipe, "audioconvert", "autoaudiosink");
+    } else {
+        debug!("Unknown pad {:?}, ignoring", pad);
+    }
 }
 
 fn webrtc_on_incoming_stream(values: &[glib::Value], pipe: &gst::Element) {
@@ -66,13 +98,14 @@ fn webrtc_on_offer_created(promise: &gst::Promise, webrtc: gst::Element, out: ws
         .unwrap()
         .get::<gst_webrtc::WebRTCSessionDescription>()
         .expect("Invalid argument");
-    debug!("offer {}", sdp_message_as_text(offer.clone()).unwrap());
+    let sdp_text = offer.get_sdp().as_text().unwrap();
+    debug!("offer {}", sdp_text);
     webrtc
         .emit("set-local-description", &[&offer, &None::<gst::Promise>])
         .unwrap();
     let message = json!({
         "type": "offer",
-        "sdp": sdp_message_as_text(offer).unwrap(),
+        "sdp": sdp_text,
     });
     out.send(message.to_string()).unwrap();
 }
@@ -155,12 +188,4 @@ pub fn set_up_webrtc(out: &ws::Sender) -> Result<gst::Element, Error> {
     })?;
     pipeline.set_state(gst::State::Playing).into_result()?;
     Ok(webrtc.clone())
-}
-
-fn sdp_message_as_text(offer: gst_webrtc::WebRTCSessionDescription) -> Option<String> {
-    unsafe {
-        from_glib_full(gst_sdp_sys::gst_sdp_message_as_text(
-            (*offer.to_glib_none().0).sdp,
-        ))
-    }
 }

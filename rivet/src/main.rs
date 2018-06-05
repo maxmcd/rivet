@@ -23,7 +23,6 @@ fn main() {
     env_logger::init();
     gst::init().unwrap();
     signalling::start_server();
-
     let main_loop = glib::MainLoop::new(None, false);
     main_loop.run();
 
