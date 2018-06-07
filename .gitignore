@@ -1,2 +1,5 @@
 .DS_Store
 *.log
+*.mp4
+rivet/out-rtsp.png
+rivet/out.png

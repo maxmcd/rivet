@@ -11,6 +11,7 @@ RUN cargo install
 RUN cargo build
 COPY . /opt/
 
+ENV GST_DEBUG_DUMP_DOT_DIR=/opt/debug/
 ENV RUST_LOG=rust_test=info
 
 CMD cargo run

@@ -1,0 +1,4 @@
+ - add tee element istead of fakesink 
+ - have one branch of tee go to fake sink, add a queue?
+ - dynamically add gst_element_add_pad (element, pad); to tee
+ - name webrtc connections and make sure you can retreieve them

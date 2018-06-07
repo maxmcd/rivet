@@ -8,8 +8,11 @@ services:
       - 8883:8883
     volumes:
       - ./rivet/src/:/opt/src/
+      - ./rivet/debug/:/opt/debug/
       - ./rivet/Cargo.toml:/opt/Cargo.toml
     command: sleep 100000
+    environment:
+      - GST_DEBUG_DUMP_DOT_DIR=/opt/debug/
   browser-debug:
     build: ./browser-debug
     ports:
