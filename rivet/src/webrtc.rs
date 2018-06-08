@@ -6,11 +6,22 @@ use gst_webrtc;
 use std::str::FromStr;
 use ws;
 
-fn on_incoming_rtpbin_stream(values: &[glib::Value], pipeline: &gst::Pipeline) {
+fn on_incoming_rtpbin_stream(values: &[glib::Value], pipeline: &gst::Pipeline, name: &String) {
     let pad = values[1].get::<gst::Pad>().expect("Invalid argument");
     let pad_name = pad.get_name();
+    println!("{:?}", pad_name);
     if pad_name.starts_with("recv_rtp_src") {
-        let fakesink = gst::ElementFactory::make("fakesink", None).unwrap();
+        let media_type = if pad_name.ends_with("96") {
+            "video"
+        } else if pad_name.ends_with("97") {
+            "audio"
+        } else {
+            unreachable!()
+        };
+        let fakesink = gst::ElementFactory::make(
+            "fakesink",
+            format!("fakesink-{}{}", media_type, name).as_ref(),
+        ).unwrap();
         pipeline.add_many(&[&fakesink]).unwrap();
         fakesink.sync_state_with_parent().unwrap();
         fakesink.set_property_from_str("dump", "false");
@@ -65,8 +76,11 @@ fn on_negotiation_needed(values: &[glib::Value], out: &ws::Sender) {
     webrtc.emit("create-offer", &[&options, &promise]).unwrap();
 }
 
-pub fn set_up_webrtc(out: &ws::Sender) -> Result<(gst::Element, gst::Pipeline), Error> {
-    let pipeline = gst::Pipeline::new("pipeline");
+pub fn set_up_webrtc(
+    out: &ws::Sender,
+    name: String,
+) -> Result<(gst::Element, gst::Pipeline), Error> {
+    let pipeline = gst::Pipeline::new(format!("pipeline{}", name).as_ref());
     let webrtc = gst::ElementFactory::make("webrtcbin", "webrtcsource").unwrap();
     let rtpbin = gst::ElementFactory::make("rtpbin", None).unwrap();
     webrtc.set_property_from_str("stun-server", "stun://stun.l.google.com:19302");
@@ -86,6 +100,7 @@ pub fn set_up_webrtc(out: &ws::Sender) -> Result<(gst::Element, gst::Pipeline), 
             ],
         )
         .unwrap();
+    // TODO don't use stringly typed caps
     webrtc
         .emit(
             "add-transceiver",
@@ -114,7 +129,7 @@ pub fn set_up_webrtc(out: &ws::Sender) -> Result<(gst::Element, gst::Pipeline), 
     })?;
     let pipeline_clone = pipeline.clone();
     rtpbin.connect("pad-added", false, move |values| {
-        on_incoming_rtpbin_stream(values, &pipeline_clone);
+        on_incoming_rtpbin_stream(values, &pipeline_clone, &name);
         None
     })?;
     let rtpbin_clone = rtpbin.clone();

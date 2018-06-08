@@ -2,8 +2,13 @@ use gst;
 use gst::prelude::*;
 use gst_rtsp_server;
 use gst_rtsp_server::prelude::*;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
-pub fn start_server(main_pipeline: &gst::Pipeline) {
+pub fn start_server(
+    main_pipeline: &gst::Pipeline,
+    _stream_map: &Arc<Mutex<HashMap<String, bool>>>,
+) {
     let server = gst_rtsp_server::RTSPServer::new();
     server.set_address("0.0.0.0");
     let factory = gst_rtsp_server::RTSPMediaFactory::new();

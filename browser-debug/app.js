@@ -12,7 +12,7 @@ function onRemoteStreamAdded(event) {
     audioTracks = event.stream.getAudioTracks();
 }
 
-ws_conn = new WebSocket("ws://localhost:8883");
+ws_conn = new WebSocket("ws://localhost:8883/foo");
 ws_conn.addEventListener("open", event => {
     console.log("ws connection open");
 

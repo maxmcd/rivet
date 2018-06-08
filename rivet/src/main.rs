@@ -21,12 +21,15 @@ mod signalling;
 mod webrtc;
 
 use gst::prelude::*;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 fn main() {
     env_logger::init();
     gst::init().unwrap();
 
+    let stream_map: Arc<Mutex<HashMap<String, bool>>> = Arc::new(Mutex::new(HashMap::new()));
     let main_pipeline = gst::Pipeline::new("main");
     let bus = main_pipeline.get_bus().unwrap();
     bus.add_watch(move |_, msg| {
@@ -41,8 +44,9 @@ fn main() {
         glib::Continue(true)
     });
     let main_pipeline_clone = main_pipeline.clone();
-    thread::spawn(move || signalling::start_server(&main_pipeline_clone));
+    let stream_map_clone = stream_map.clone();
+    thread::spawn(move || signalling::start_server(&main_pipeline_clone, &stream_map_clone));
     let main_loop = glib::MainLoop::new(None, false);
-    rtsp::start_server(&main_pipeline);
+    rtsp::start_server(&main_pipeline, &stream_map);
     main_loop.run();
 }
