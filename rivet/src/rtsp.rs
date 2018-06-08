@@ -3,7 +3,7 @@ use gst::prelude::*;
 use gst_rtsp_server;
 use gst_rtsp_server::prelude::*;
 
-pub fn start_server() {
+pub fn start_server(main_pipeline: &gst::Pipeline) {
     let server = gst_rtsp_server::RTSPServer::new();
     server.set_address("0.0.0.0");
     let factory = gst_rtsp_server::RTSPMediaFactory::new();
@@ -24,13 +24,15 @@ pub fn start_server() {
     );
     factory.set_shared(true);
 
-    factory.connect_media_configure(|_, media| {
+    let main_pipeline_clone = main_pipeline.clone();
+    factory.connect_media_configure(move |_, media| {
         println!("Hello!");
         let pipeline = media
             .get_element()
             .unwrap()
             .dynamic_cast::<gst::Bin>()
             .unwrap();
+        main_pipeline_clone.add(&pipeline).unwrap();
         println!("{:?}", pipeline.get_name());
         let rtph264pay = pipeline.get_by_name("pay0").unwrap();
 

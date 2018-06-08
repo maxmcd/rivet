@@ -13,7 +13,7 @@ fn on_incoming_rtpbin_stream(values: &[glib::Value], pipeline: &gst::Pipeline) {
         let fakesink = gst::ElementFactory::make("fakesink", None).unwrap();
         pipeline.add_many(&[&fakesink]).unwrap();
         fakesink.sync_state_with_parent().unwrap();
-        fakesink.set_property_from_str("dump", "true");
+        fakesink.set_property_from_str("dump", "false");
         let fakepad = fakesink.get_static_pad("sink").unwrap();
         let ret = pad.link(&fakepad);
         assert_eq!(ret, gst::PadLinkReturn::Ok);
@@ -65,7 +65,7 @@ fn on_negotiation_needed(values: &[glib::Value], out: &ws::Sender) {
     webrtc.emit("create-offer", &[&options, &promise]).unwrap();
 }
 
-pub fn set_up_webrtc(out: &ws::Sender) -> Result<gst::Element, Error> {
+pub fn set_up_webrtc(out: &ws::Sender) -> Result<(gst::Element, gst::Pipeline), Error> {
     let pipeline = gst::Pipeline::new("pipeline");
     let webrtc = gst::ElementFactory::make("webrtcbin", "webrtcsource").unwrap();
     let rtpbin = gst::ElementFactory::make("rtpbin", None).unwrap();
@@ -126,5 +126,5 @@ pub fn set_up_webrtc(out: &ws::Sender) -> Result<gst::Element, Error> {
         None
     })?;
     pipeline.set_state(gst::State::Playing).into_result()?;
-    Ok(webrtc.clone())
+    Ok((webrtc, pipeline))
 }

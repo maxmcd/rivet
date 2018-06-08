@@ -20,13 +20,29 @@ mod rtsp;
 mod signalling;
 mod webrtc;
 
+use gst::prelude::*;
 use std::thread;
 
 fn main() {
     env_logger::init();
     gst::init().unwrap();
-    thread::spawn(move || signalling::start_server());
+
+    let main_pipeline = gst::Pipeline::new("main");
+    let bus = main_pipeline.get_bus().unwrap();
+    bus.add_watch(move |_, msg| {
+        use gst::MessageView;
+
+        match msg.view() {
+            MessageView::StateChanged(_) => {}
+            MessageView::StreamStatus(_) => {}
+            _ => println!("New bus message {:?}\r", msg),
+        };
+        // https://sdroege.github.io/rustdoc/gstreamer/gstreamer/message/enum.MessageView.html
+        glib::Continue(true)
+    });
+    let main_pipeline_clone = main_pipeline.clone();
+    thread::spawn(move || signalling::start_server(&main_pipeline_clone));
     let main_loop = glib::MainLoop::new(None, false);
-    rtsp::start_server();
+    rtsp::start_server(&main_pipeline);
     main_loop.run();
 }

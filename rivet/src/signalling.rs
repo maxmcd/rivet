@@ -1,5 +1,6 @@
 use glib::ObjectExt;
 use gst;
+use gst::prelude::*;
 use gst_sdp;
 use gst_webrtc;
 use serde_json;
@@ -9,6 +10,7 @@ use ws::{CloseCode, Handler, Handshake, Message, Result};
 struct WsServer {
     out: ws::Sender,
     webrtc: Option<gst::Element>,
+    main_pipeline: gst::Pipeline,
 }
 
 fn ws_on_sdp(webrtc: &gst::Element, json_msg: &serde_json::Value) {
@@ -38,14 +40,21 @@ fn ws_on_ice(webrtc: &gst::Element, json_msg: &serde_json::Value) {
 
 impl Handler for WsServer {
     fn on_open(&mut self, hs: Handshake) -> Result<()> {
-        self.webrtc = match set_up_webrtc(&self.out) {
-            Ok(webrtc) => Some(webrtc),
+        let (webrtc, pipeline) = match set_up_webrtc(&self.out) {
+            Ok(result) => result,
             Err(err) => {
                 error!("Failed to set up webrtc {:?}, closing ws connection", err);
                 self.out.close(CloseCode::Normal).unwrap();
                 return Ok(());
             }
         };
+        self.webrtc = Some(webrtc);
+        match self.main_pipeline.add(&pipeline) {
+            Ok(()) => (),
+            Err(err) => {
+                println!("{:?}", err);
+            }
+        }
         info!("New connection from {}", hs.peer_addr.unwrap());
         Ok(())
     }
@@ -70,12 +79,13 @@ impl Handler for WsServer {
     }
 }
 
-pub fn start_server() {
+pub fn start_server(main_pipeline: &gst::Pipeline) {
     let host = "0.0.0.0:8883";
     info!("Ws Listening at {}", host);
     let ws = ws::WebSocket::new(|out| WsServer {
         out: out,
         webrtc: None,
+        main_pipeline: main_pipeline.clone(),
     }).unwrap();
     // blocks
     ws.listen(host).unwrap();
