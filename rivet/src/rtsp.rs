@@ -1,13 +1,73 @@
 use gst;
 use gst::prelude::*;
+use gst_app;
 use gst_rtsp_server;
 use gst_rtsp_server::prelude::*;
-use rand;
-use rand::Rng;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use webrtc;
 
-fn link_pads_to_tee(media: &gst_rtsp_server::RTSPMedia, main_pipeline: &gst::Pipeline) {
+// TODO: DRY
+const WIDTH: usize = 320;
+const HEIGHT: usize = 240;
+
+fn link_appsrc_to_pad(pipeline: &gst::Bin, name: &str, caps: gst::GstRc<gst::CapsRef>) {
+    let pay_element = pipeline.get_by_name(name).unwrap();
+    let rtp_src_pad = pay_element.get_static_pad("src").unwrap();
+    let proxypad = rtp_src_pad.get_peer().unwrap();
+    rtp_src_pad.unlink(&proxypad).unwrap();
+    let src = gst::ElementFactory::make("appsrc", None).unwrap();
+    pipeline.add_many(&[&src]).unwrap();
+    src.sync_state_with_parent().unwrap();
+    let appsrc = src.dynamic_cast::<gst_app::AppSrc>()
+        .expect("Source element is expected to be an appsrc!");
+    appsrc.set_caps(&caps);
+    let replacement_pad = appsrc.get_static_pad("src").unwrap();
+
+    let mut i = 0;
+    appsrc.set_callbacks(
+        gst_app::AppSrcCallbacks::new()
+            .need_data(move |appsrc, _| {
+                if i == 100 {
+                    let _ = appsrc.end_of_stream();
+                    return;
+                }
+
+                println!("Producing frame {}", i);
+
+                let r = if i % 2 == 0 { 0 } else { 255 };
+                let g = if i % 3 == 0 { 0 } else { 255 };
+                let b = if i % 5 == 0 { 0 } else { 255 };
+
+                let mut buffer = gst::Buffer::with_size(WIDTH * HEIGHT * 4).unwrap();
+                {
+                    let buffer = buffer.get_mut().unwrap();
+                    buffer.set_pts(i * 500 * gst::MSECOND);
+
+                    let mut data = buffer.map_writable().unwrap();
+
+                    for p in data.as_mut_slice().chunks_mut(4) {
+                        assert_eq!(p.len(), 4);
+                        p[0] = b;
+                        p[1] = g;
+                        p[2] = r;
+                        p[3] = 0;
+                    }
+                }
+
+                i += 1;
+
+                // appsrc already handles the error here
+                let _ = appsrc.push_buffer(buffer);
+            })
+            .build(),
+    );
+
+    let ret = replacement_pad.link(&proxypad);
+    assert_eq!(ret, gst::PadLinkReturn::Ok);
+}
+
+fn configure_media(media: &gst_rtsp_server::RTSPMedia) {
     println!("Hello!");
     let pipeline = media
         .get_element()
@@ -15,46 +75,13 @@ fn link_pads_to_tee(media: &gst_rtsp_server::RTSPMedia, main_pipeline: &gst::Pip
         .dynamic_cast::<gst::Bin>()
         .unwrap();
 
-    let webrtc_pipeline = main_pipeline
-        .get_by_name("pipeline/foo")
-        .unwrap()
-        .dynamic_cast::<gst::Bin>()
-        .unwrap();
-    let tee = main_pipeline.get_by_name("tee-video/foo").unwrap();
-    println!("{:?}", tee);
-
-    let queue = gst::ElementFactory::make("queue", None).unwrap();
-    queue.set_property_from_str("leaky", "downstream");
-    let vid_shmsink = gst::ElementFactory::make("shmsink", None).unwrap();
-    let our_id = rand::thread_rng().gen_range(10, 10_000);
-    vid_shmsink.set_property_from_str("socket-path", format!("/tmp/video{}", our_id).as_ref());
-    webrtc_pipeline.add_many(&[&queue, &vid_shmsink]).unwrap();
-    gst::Element::link_many(&[&tee, &queue, &vid_shmsink]).unwrap();
-    vid_shmsink.sync_state_with_parent().unwrap();
-    queue.sync_state_with_parent().unwrap();
-
-    let replacement = gst::ElementFactory::make("shmsrc", "pay99").unwrap();
-    replacement.set_property_from_str("socket-path", format!("/tmp/video{}", our_id).as_ref());
-    let rtpbin = gst::ElementFactory::make("rtpbin", None).unwrap();
-    pipeline.add_many(&[&replacement, &rtpbin]).unwrap();
-    gst::Element::link_many(&[&replacement, &rtpbin]).unwrap();
-
-    let rtph264pay = pipeline.get_by_name("pay0").unwrap();
-    let rtp_src_pad = rtph264pay.get_static_pad("src").unwrap();
-    let proxypad = rtp_src_pad.get_peer().unwrap();
-    rtp_src_pad.unlink(&proxypad).unwrap();
-    let replacement_pad = rtpbin.get_static_pad("src").unwrap();
-    let ret = replacement_pad.link(&proxypad);
-    assert_eq!(ret, gst::PadLinkReturn::Ok);
-    // gst::debug_bin_to_dot_file_with_ts(
-    //     &pipeline,
-    //     gst::DebugGraphDetails::MEDIA_TYPE,
-    //     "rtsp-server",
-    // );
+    link_appsrc_to_pad(&pipeline, "pay0", webrtc::video_caps());
+    link_appsrc_to_pad(&pipeline, "pay1", webrtc::audio_caps());
+    println!("done fuckin' this shit up");
 }
 
 pub fn start_server(
-    main_pipeline: &gst::Pipeline,
+    _main_pipeline: &gst::Pipeline,
     _stream_map: &Arc<Mutex<HashMap<String, bool>>>,
 ) {
     let server = gst_rtsp_server::RTSPServer::new();
@@ -71,20 +98,16 @@ pub fn start_server(
     // with little fuss
     factory.set_launch(
         "(
-        rtph264pay name=pay0 pt=96
-        audiotestsrc wave=2 ! audio/x-raw,rate=8000 !
-        alawenc ! rtppcmapay name=pay1 pt=97
+        appsrc name=pay0 pt=96
+        appsrc name=pay1 pt=97
          )",
     );
     factory.set_shared(true);
 
-    let main_pipeline_clone = main_pipeline.clone();
     factory.connect_media_configure(move |_, media| {
-        link_pads_to_tee(&media, &main_pipeline_clone);
+        configure_media(&media);
     });
     // factory.connect_media_constructed(|_, media| {
-    //     println!("Hello!");
-    //     println!("{:?}", media);
     // });
 
     mounts.add_factory("/test", &factory);
