@@ -9,6 +9,7 @@ gobject-sys = { git = "https://github.com/gtk-rs/sys" }
 gstreamer = { git = "https://github.com/sdroege/gstreamer-rs", rev="85ca3b9", features = ["v1_14"] }
 gstreamer-sys = { git = "https://github.com/sdroege/gstreamer-sys" }
 gstreamer-rtsp = { git = "https://github.com/sdroege/gstreamer-rs", rev="85ca3b9" }
+gstreamer-app = { git = "https://github.com/sdroege/gstreamer-rs", rev="85ca3b9" }
 gstreamer-rtsp-server = { git = "https://github.com/sdroege/gstreamer-rs", rev="85ca3b9" }
 gstreamer-sdp = { git = "https://github.com/sdroege/gstreamer-rs", rev="85ca3b9" }
 gstreamer-sdp-sys = { git = "https://github.com/sdroege/gstreamer-sys" }

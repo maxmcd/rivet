@@ -1,6 +1,7 @@
 extern crate glib;
 extern crate gobject_sys;
 extern crate gstreamer as gst;
+extern crate gstreamer_app as gst_app;
 extern crate gstreamer_rtsp as gst_rtsp;
 extern crate gstreamer_rtsp_server as gst_rtsp_server;
 extern crate gstreamer_sdp as gst_sdp;
@@ -14,6 +15,7 @@ extern crate ws;
 #[macro_use]
 extern crate log;
 extern crate env_logger;
+extern crate rand;
 
 mod error;
 mod rtsp;
@@ -41,6 +43,15 @@ fn main() {
             _ => println!("New bus message {:?}\r", msg),
         };
         // https://sdroege.github.io/rustdoc/gstreamer/gstreamer/message/enum.MessageView.html
+        glib::Continue(true)
+    });
+    let main_pipeline_clone = main_pipeline.clone();
+    glib::source::timeout_add_seconds(5, move || {
+        gst::debug_bin_to_dot_file_with_ts(
+            &main_pipeline_clone,
+            gst::DebugGraphDetails::MEDIA_TYPE,
+            "main-pipeline",
+        );
         glib::Continue(true)
     });
     let main_pipeline_clone = main_pipeline.clone();
