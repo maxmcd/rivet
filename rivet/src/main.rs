@@ -14,8 +14,10 @@ extern crate serde_json;
 extern crate ws;
 #[macro_use]
 extern crate log;
+extern crate byte_slice_cast;
 extern crate env_logger;
 extern crate rand;
+use byte_slice_cast::*;
 
 mod error;
 mod rtsp;
@@ -49,15 +51,14 @@ fn main() {
     glib::source::timeout_add_seconds(5, move || {
         gst::debug_bin_to_dot_file_with_ts(
             &main_pipeline_clone,
-            gst::DebugGraphDetails::MEDIA_TYPE,
+            gst::DebugGraphDetails::ALL,
             "main-pipeline",
         );
         glib::Continue(true)
     });
-    let main_pipeline_clone = main_pipeline.clone();
     let stream_map_clone = stream_map.clone();
-    thread::spawn(move || signalling::start_server(&main_pipeline_clone, &stream_map_clone));
+    thread::spawn(move || signalling::start_server(&main_pipeline, &stream_map_clone));
     let main_loop = glib::MainLoop::new(None, false);
-    rtsp::start_server(&main_pipeline, &stream_map);
+    rtsp::start_server(&stream_map);
     main_loop.run();
 }

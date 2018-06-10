@@ -5,6 +5,7 @@ use gst::prelude::*;
 use gst_app;
 use gst_webrtc;
 use std::str::FromStr;
+use std::thread;
 use ws;
 
 pub fn video_caps() -> gst::GstRc<gst::CapsRef> {
@@ -124,17 +125,25 @@ pub fn set_up_webrtc(
             unreachable!()
         };
         let sink = gst::ElementFactory::make("appsink", None).unwrap();
+        let queue = gst::ElementFactory::make("queue", None).unwrap();
         let appsink = sink.clone()
             .dynamic_cast::<gst_app::AppSink>()
             .expect("Sink element is expected to be an appsink!");
-        pipeline_clone.add_many(&[&appsink]).unwrap();
+        pipeline_clone.add_many(&[&queue, &sink]).unwrap();
+        gst::Element::link_many(&[&queue, &sink]).unwrap();
         // tee.link(&appsink).unwrap();
+        queue.sync_state_with_parent().unwrap();
         appsink.sync_state_with_parent().unwrap();
+        appsink.set_property_from_str("sync", "true");
         appsink.set_caps(&caps);
+        appsink
+            .set_state(gst::State::Playing)
+            .into_result()
+            .unwrap();
         appsink.set_callbacks(
             gst_app::AppSinkCallbacks::new()
-                .new_sample(|appsink| {
-                    println!("got buffer");
+                .new_sample(move |appsink| {
+                    println!("got buffer {}", pad_name);
                     let sample = match appsink.pull_sample() {
                         None => return gst::FlowReturn::Eos,
                         Some(sample) => sample,
@@ -147,12 +156,11 @@ pub fn set_up_webrtc(
 
                         return gst::FlowReturn::Error;
                     };
-                    println!("got buffer");
                     gst::FlowReturn::Ok
                 })
                 .build(),
         );
-        let appsink_pad = appsink.get_static_pad("sink").unwrap();
+        let appsink_pad = queue.get_static_pad("sink").unwrap();
         let ret = pad.link(&appsink_pad);
         assert_eq!(ret, gst::PadLinkReturn::Ok);
     });
