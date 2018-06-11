@@ -14,26 +14,25 @@ extern crate serde_json;
 extern crate ws;
 #[macro_use]
 extern crate log;
+extern crate bus;
 extern crate byte_slice_cast;
 extern crate env_logger;
 extern crate rand;
-use byte_slice_cast::*;
 
+mod common;
 mod error;
 mod rtsp;
 mod signalling;
 mod webrtc;
 
 use gst::prelude::*;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 use std::thread;
 
 fn main() {
     env_logger::init();
     gst::init().unwrap();
 
-    let stream_map: Arc<Mutex<HashMap<String, bool>>> = Arc::new(Mutex::new(HashMap::new()));
+    let stream_map = common::StreamMap::new();
     let main_pipeline = gst::Pipeline::new("main");
     let bus = main_pipeline.get_bus().unwrap();
     bus.add_watch(move |_, msg| {

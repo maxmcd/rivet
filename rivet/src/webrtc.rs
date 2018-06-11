@@ -1,38 +1,13 @@
+use common::{audio_caps, video_caps, WsConnInner};
 use error::Error;
 use glib;
 use gst;
 use gst::prelude::*;
 use gst_app;
 use gst_webrtc;
-use std::str::FromStr;
-use std::thread;
 use ws;
 
-pub fn video_caps() -> gst::GstRc<gst::CapsRef> {
-    gst::Caps::new_simple(
-        "application/x-rtp",
-        &[
-            ("media", &"video"),
-            ("encoding-name", &"VP8"),
-            ("payload", &(96i32)),
-            ("clock-rate", &(90_000i32)),
-        ],
-    )
-}
-pub fn audio_caps() -> gst::GstRc<gst::CapsRef> {
-    gst::Caps::new_simple(
-        "application/x-rtp",
-        &[
-            ("media", &"audio"),
-            ("encoding-name", &"OPUS"),
-            ("payload", &(97i32)),
-            ("clock-rate", &(48_000i32)),
-            ("encoding-params", &"2"),
-        ],
-    )
-}
-
-fn on_offer_created(promise: &gst::Promise, webrtc: gst::Element, out: ws::Sender) {
+fn on_offer_created(promise: &gst::Promise, webrtc: gst::Element, sender: ws::Sender) {
     debug!("create-offer callback");
     let reply = promise.get_reply().unwrap();
     let offer = reply
@@ -49,10 +24,10 @@ fn on_offer_created(promise: &gst::Promise, webrtc: gst::Element, out: ws::Sende
         "type": "offer",
         "sdp": sdp_text,
     });
-    out.send(message.to_string()).unwrap();
+    sender.send(message.to_string()).unwrap();
 }
 
-fn send_ice_candidate_message(values: &[glib::Value], out: &ws::Sender) {
+fn send_ice_candidate_message(values: &[glib::Value], sender: &ws::Sender) {
     let mlineindex = values[1].get::<u32>().expect("Invalid argument");
     let candidate = values[2].get::<String>().expect("Invalid argument");
     let message = json!({
@@ -62,26 +37,24 @@ fn send_ice_candidate_message(values: &[glib::Value], out: &ws::Sender) {
         }
     });
     debug!("Sending {}", message.to_string());
-    out.send(message.to_string()).unwrap();
+    sender.send(message.to_string()).unwrap();
 }
 
-fn on_negotiation_needed(values: &[glib::Value], out: &ws::Sender) {
+fn on_negotiation_needed(values: &[glib::Value], sender: &ws::Sender) {
     debug!("on-negotiation-needed {:?}", values);
     let webrtc = values[0].get::<gst::Element>().expect("Invalid argument");
     let clone = webrtc.clone();
-    let out_clone = out.clone();
+    let sender_clone = sender.clone();
     let promise = gst::Promise::new_with_change_func(move |promise: &gst::Promise| {
-        on_offer_created(promise, clone, out_clone)
+        on_offer_created(promise, clone, sender_clone)
     });
     let options = gst::Structure::new_empty("options");
     webrtc.emit("create-offer", &[&options, &promise]).unwrap();
 }
 
-pub fn set_up_webrtc(
-    out: &ws::Sender,
-    name: String,
-) -> Result<(gst::Element, gst::Pipeline), Error> {
-    let pipeline = gst::Pipeline::new(format!("pipeline{}", name).as_ref());
+// TODO: only pass around WsConnInner
+pub fn set_up_webrtc(ws_conn: &mut WsConnInner) -> Result<(), Error> {
+    let pipeline = gst::Pipeline::new(format!("pipeline{}", ws_conn.path).as_ref());
     let webrtc = gst::ElementFactory::make("webrtcbin", "webrtcsource").unwrap();
     webrtc.set_property_from_str("stun-server", "stun://stun.l.google.com:19302");
     pipeline.add_many(&[&webrtc]).unwrap();
@@ -103,24 +76,25 @@ pub fn set_up_webrtc(
             ],
         )
         .unwrap();
-    let out_clone = out.clone();
+    let sender_clone = ws_conn.sender.clone();
     webrtc.connect("on-negotiation-needed", false, move |values| {
-        on_negotiation_needed(values, &out_clone);
+        on_negotiation_needed(values, &sender_clone);
         None
     })?;
-    let out_clone = out.clone();
+    let sender_clone = ws_conn.sender.clone();
     webrtc.connect("on-ice-candidate", false, move |values| {
-        send_ice_candidate_message(values, &out_clone);
+        send_ice_candidate_message(values, &sender_clone);
         None
     })?;
     let pipeline_clone = pipeline.clone();
+    let av_bus = ws_conn.add_conn();
     webrtc.connect_pad_added(move |_, pad| {
         let pad_name = pad.get_name();
         println!("pad thing {:?}", pad_name);
-        let caps = if pad_name == "src_0" {
-            video_caps()
+        let (caps, bus) = if pad_name == "src_0" {
+            (video_caps(), av_bus.video.clone())
         } else if pad_name == "src_1" {
-            audio_caps()
+            (audio_caps(), av_bus.audio.clone())
         } else {
             unreachable!()
         };
@@ -143,19 +117,12 @@ pub fn set_up_webrtc(
         appsink.set_callbacks(
             gst_app::AppSinkCallbacks::new()
                 .new_sample(move |appsink| {
-                    println!("got buffer {}", pad_name);
+                    debug!("got buffer {}", pad_name);
                     let sample = match appsink.pull_sample() {
                         None => return gst::FlowReturn::Eos,
                         Some(sample) => sample,
                     };
-
-                    let _buffer = if let Some(buffer) = sample.get_buffer() {
-                        buffer
-                    } else {
-                        println!("Failed to get buffer from appsink");
-
-                        return gst::FlowReturn::Error;
-                    };
+                    bus.lock().unwrap().broadcast(sample);
                     gst::FlowReturn::Ok
                 })
                 .build(),
@@ -165,5 +132,9 @@ pub fn set_up_webrtc(
         assert_eq!(ret, gst::PadLinkReturn::Ok);
     });
     pipeline.set_state(gst::State::Playing).into_result()?;
-    Ok((webrtc, pipeline))
+    ws_conn.main_pipeline.add(&pipeline)?;
+    ws_conn.webrtc = Some(webrtc);
+    ws_conn.pipeline = Some(pipeline);
+
+    Ok(())
 }

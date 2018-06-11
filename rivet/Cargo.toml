@@ -16,6 +16,7 @@ gstreamer-sdp-sys = { git = "https://github.com/sdroege/gstreamer-sys" }
 gstreamer-webrtc = { git = "https://github.com/sdroege/gstreamer-rs", rev="85ca3b9" }
 gstreamer-webrtc-sys = { git = "https://github.com/sdroege/gstreamer-sys" }
 rand = "0.5"
+bus = "2.0.0"
 serde_json = "1.0.19"
 ws = "0.7.6"
 env_logger = "0.5.10"
