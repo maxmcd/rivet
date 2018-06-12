@@ -15,7 +15,11 @@ fn on_offer_created(promise: &gst::Promise, webrtc: gst::Element, sender: ws::Se
         .unwrap()
         .get::<gst_webrtc::WebRTCSessionDescription>()
         .expect("Invalid argument");
-    let sdp_text = offer.get_sdp().as_text().unwrap();
+    let mut sdp = offer.get_sdp();
+    sdp.add_attribute("fmtp", "96 profile-level-id=42e00a;packetization-mode=1")
+        .unwrap();
+    let sdp_text = sdp.as_text().unwrap();
+
     debug!("offer {}", sdp_text);
     webrtc
         .emit("set-local-description", &[&offer, &None::<gst::Promise>])
@@ -63,7 +67,7 @@ pub fn set_up_webrtc(ws_conn: &mut WsConnInner) -> Result<(), Error> {
             "add-transceiver",
             &[
                 &gst_webrtc::WebRTCRTPTransceiverDirection::Recvonly,
-                &video_caps(VideoType::VP9),
+                &video_caps(VideoType::H264),
             ],
         )
         .unwrap();
@@ -91,7 +95,7 @@ pub fn set_up_webrtc(ws_conn: &mut WsConnInner) -> Result<(), Error> {
     webrtc.connect_pad_added(move |_, pad| {
         let pad_name = pad.get_name();
         let (caps, bus) = if pad_name == "src_0" {
-            (video_caps(VideoType::VP9), av_bus.video.clone())
+            (video_caps(VideoType::H264), av_bus.video.clone())
         } else if pad_name == "src_1" {
             (audio_caps(), av_bus.audio.clone())
         } else {
