@@ -1,4 +1,5 @@
 use common::{StreamMap, WsConn};
+use glib;
 use glib::ObjectExt;
 use gst;
 use gst::prelude::*;
@@ -61,6 +62,28 @@ impl Handler for WsConn {
             }
         };
 
+        // let pipeline_clone = ws_conn.pipeline.as_ref().unwrap().clone();
+        // let bus = pipeline_clone.get_bus().unwrap();
+        // bus.add_watch(move |_, msg| {
+        //     use gst::MessageView;
+
+        //     match msg.view() {
+        //         MessageView::StateChanged(_) => {}
+        //         MessageView::StreamStatus(_) => {}
+        //         _ => println!("New bus message {:?}\r", msg),
+        //     };
+        //     // https://sdroege.github.io/rustdoc/gstreamer/gstreamer/message/enum.MessageView.html
+        //     glib::Continue(true)
+        // });
+        // glib::source::timeout_add_seconds(5, move || {
+        //     gst::debug_bin_to_dot_file_with_ts(
+        //         &pipeline_clone,
+        //         gst::DebugGraphDetails::ALL,
+        //         "main-pipeline",
+        //     );
+        //     glib::Continue(true)
+        // });
+
         info!("New connection from {}", hs.peer_addr.unwrap());
         Ok(())
     }
@@ -83,12 +106,8 @@ impl Handler for WsConn {
         let mut stream_map = ws_conn.stream_map.0.lock().unwrap();
         stream_map.remove(&ws_conn.path);
         match ws_conn.pipeline {
-            Some(ref pipeline) => {
-                let plc = pipeline.clone();
-                ws_conn
-                    .main_pipeline
-                    .remove(&plc.dynamic_cast::<gst::Element>().unwrap())
-                    .unwrap();
+            Some(ref _pipeline) => {
+                // TODO tear down
             }
             None => (),
         }
@@ -100,11 +119,10 @@ impl Handler for WsConn {
     }
 }
 
-pub fn start_server(main_pipeline: &gst::Pipeline, stream_map: &StreamMap) {
+pub fn start_server(stream_map: &StreamMap) {
     let host = "0.0.0.0:8883";
     info!("Ws Listening at {}", host);
-    let ws =
-        ws::WebSocket::new(move |sender| WsConn::new(sender, main_pipeline, stream_map)).unwrap();
+    let ws = ws::WebSocket::new(move |sender| WsConn::new(sender, stream_map)).unwrap();
     // blocks
     ws.listen(host).unwrap();
 }

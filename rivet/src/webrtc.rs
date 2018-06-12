@@ -132,7 +132,6 @@ pub fn set_up_webrtc(ws_conn: &mut WsConnInner) -> Result<(), Error> {
         assert_eq!(ret, gst::PadLinkReturn::Ok);
     });
     pipeline.set_state(gst::State::Playing).into_result()?;
-    ws_conn.main_pipeline.add(&pipeline)?;
     ws_conn.webrtc = Some(webrtc);
     ws_conn.pipeline = Some(pipeline);
 

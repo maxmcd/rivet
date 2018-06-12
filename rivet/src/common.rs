@@ -32,19 +32,17 @@ pub struct WsConnInner {
     pub sender: ws::Sender,
     pub webrtc: Option<gst::Element>,
     pub pipeline: Option<gst::Pipeline>,
-    pub main_pipeline: gst::Pipeline,
     pub path: String,
     pub stream_map: StreamMap,
 }
 
 impl WsConn {
-    pub fn new(sender: ws::Sender, main_pipeline: &gst::Pipeline, stream_map: &StreamMap) -> Self {
+    pub fn new(sender: ws::Sender, stream_map: &StreamMap) -> Self {
         return WsConn(Arc::new(Mutex::new(WsConnInner {
             sender: sender,
             webrtc: None,
             pipeline: None,
             path: String::new(),
-            main_pipeline: main_pipeline.clone(),
             stream_map: stream_map.clone(),
         })));
     }

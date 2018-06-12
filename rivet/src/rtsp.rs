@@ -23,14 +23,23 @@ fn link_appsrc_to_pad(
     let rx_mutex = Arc::new(Mutex::new(rx));
     appsrc.set_callbacks(
         gst_app::AppSrcCallbacks::new()
-            .need_data(move |appsrc, _| {
-                println!("need data");
+            .need_data(move |appsrc, thing| {
+                println!("need data {}", thing);
                 let rx_mutex = rx_mutex.clone();
-                let buffer = rx_mutex.lock().unwrap().recv().unwrap();
-                let _ = appsrc.push_sample(&buffer);
+                let sample = rx_mutex.lock().unwrap().recv().unwrap();
+                println!("got sample {:?}", sample.get_segment().unwrap());
+                let _ = appsrc.push_sample(&sample);
             })
             .build(),
     );
+    // appsrc.set_callbacks(
+    //     gst_app::AppSrcCallbacks::new()
+    //         .seek_data(move |_appsrc, _| {
+    //             println!("seek data");
+    //             true
+    //         })
+    //         .build(),
+    // );
 }
 
 fn configure_media(media: &gst_rtsp_server::RTSPMedia, stream_map: StreamMap) {

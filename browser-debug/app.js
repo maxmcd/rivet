@@ -41,7 +41,7 @@ ws_conn.addEventListener("open", event => {
     };
 });
 ws_conn.addEventListener("error", e => {
-    pc.close();
+    if (pc) pc.close();
     console.log("error", e);
 });
 ws_conn.addEventListener("message", e => {
@@ -92,6 +92,9 @@ const onLocalDescription = desc => {
 };
 
 ws_conn.addEventListener("close", e => {
-    pc.close();
+    if (pc) pc.close();
+    setTimeout(() => {
+        window.location.reload();
+    }, 500)
     console.log("close", e);
 });
