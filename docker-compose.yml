@@ -1,8 +1,11 @@
-version: '3'
+version: '3.2'
 
 services:
   rivet:
-    build: ./rivet
+    build: 
+      context: ./rivet
+      cache_from:
+        - maxmcd/rivet:rivet
     ports:
       - 8554:8554
       - 8883:8883
@@ -13,6 +16,7 @@ services:
     command: sleep 100000
     environment:
       - GST_DEBUG_DUMP_DOT_DIR=/opt/debug/
+    image: maxmcd/rivet:rivet
   browser-debug:
     build: ./browser-debug
     ports:

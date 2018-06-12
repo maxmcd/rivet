@@ -1,4 +1,5 @@
 use bus;
+use glib;
 use gst;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -54,16 +55,27 @@ impl WsConnInner {
     }
 }
 
-pub fn video_caps() -> gst::GstRc<gst::CapsRef> {
-    gst::Caps::new_simple(
-        "application/x-rtp",
-        &[
+pub enum VideoType {
+    VP9,
+    H264,
+}
+
+pub fn video_caps(video_type: VideoType) -> gst::GstRc<gst::CapsRef> {
+    let values: &[(&str, &glib::ToSendValue)] = match video_type {
+        VideoType::VP9 => &[
             ("media", &"video"),
             ("encoding-name", &"VP8"),
             ("payload", &(96i32)),
             ("clock-rate", &(90_000i32)),
         ],
-    )
+        VideoType::H264 => &[
+            ("media", &"video"),
+            ("encoding-name", &"H264"),
+            ("payload", &(96i32)),
+            ("clock-rate", &(90_000i32)),
+        ],
+    };
+    gst::Caps::new_simple("application/x-rtp", values)
 }
 pub fn audio_caps() -> gst::GstRc<gst::CapsRef> {
     gst::Caps::new_simple(

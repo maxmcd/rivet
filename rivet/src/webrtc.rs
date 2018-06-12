@@ -1,4 +1,4 @@
-use common::{audio_caps, video_caps, WsConnInner};
+use common::{audio_caps, video_caps, VideoType, WsConnInner};
 use error::Error;
 use glib;
 use gst;
@@ -63,7 +63,7 @@ pub fn set_up_webrtc(ws_conn: &mut WsConnInner) -> Result<(), Error> {
             "add-transceiver",
             &[
                 &gst_webrtc::WebRTCRTPTransceiverDirection::Recvonly,
-                &video_caps(),
+                &video_caps(VideoType::VP9),
             ],
         )
         .unwrap();
@@ -90,9 +90,8 @@ pub fn set_up_webrtc(ws_conn: &mut WsConnInner) -> Result<(), Error> {
     let av_bus = ws_conn.add_conn();
     webrtc.connect_pad_added(move |_, pad| {
         let pad_name = pad.get_name();
-        println!("pad thing {:?}", pad_name);
         let (caps, bus) = if pad_name == "src_0" {
-            (video_caps(), av_bus.video.clone())
+            (video_caps(VideoType::VP9), av_bus.video.clone())
         } else if pad_name == "src_1" {
             (audio_caps(), av_bus.audio.clone())
         } else {

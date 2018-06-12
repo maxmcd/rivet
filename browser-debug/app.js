@@ -6,7 +6,6 @@ var rtc_configuration = {
     ]
 };
 
-
 function onRemoteStreamAdded(event) {
     videoTracks = event.stream.getVideoTracks();
     audioTracks = event.stream.getAudioTracks();
@@ -85,7 +84,7 @@ ws_conn.addEventListener("message", e => {
 // Local description was set, send it to peer
 const onLocalDescription = desc => {
     console.log("Got local description: " + JSON.stringify(desc));
-    pc.setLocalDescription(desc).then(function() {
+    return pc.setLocalDescription(desc).then(function() {
         console.log("Sending SDP answer");
         ws_conn.send(JSON.stringify(pc.localDescription));
     });
@@ -95,6 +94,6 @@ ws_conn.addEventListener("close", e => {
     if (pc) pc.close();
     setTimeout(() => {
         window.location.reload();
-    }, 500)
+    }, 500);
     console.log("close", e);
 });

@@ -1,5 +1,5 @@
 use bus;
-use common::{audio_caps, video_caps, StreamMap};
+use common::{audio_caps, video_caps, StreamMap, VideoType};
 use gst;
 use gst::prelude::*;
 use gst_app;
@@ -24,10 +24,10 @@ fn link_appsrc_to_pad(
     appsrc.set_callbacks(
         gst_app::AppSrcCallbacks::new()
             .need_data(move |appsrc, thing| {
-                println!("need data {}", thing);
+                debug!("need data {}", thing);
                 let rx_mutex = rx_mutex.clone();
                 let sample = rx_mutex.lock().unwrap().recv().unwrap();
-                println!("got sample {:?}", sample.get_segment().unwrap());
+                // println!("got sample {:?}", sample.get_segment().unwrap());
                 let _ = appsrc.push_sample(&sample);
             })
             .build(),
@@ -50,11 +50,31 @@ fn configure_media(media: &gst_rtsp_server::RTSPMedia, stream_map: StreamMap) {
         .dynamic_cast::<gst::Bin>()
         .unwrap();
 
+    // media.connect_new_state(|_media, _id| {
+    //     println!("connect_new_state {:?}", _id);
+    // });
+    // media.connect_new_stream(|_media, _stream| {
+    //     println!("connect_new_stream {:?}", _stream);
+    // });
+    // media.connect_prepared(|_media| {
+    //     println!("connect_prepared");
+    // });
+    // media.connect_removed_stream(|_media, _stream| {
+    //     println!("connect_removed_stream {:?}", _stream);
+    // });
+    // media.connect_target_state(|_media, _num| {
+    //     println!("connect_target_state {:?}", _num);
+    //     if _num == 1 {}
+    // });
+    // media.connect_unprepared(|_media| {
+    //     println!("connect_unprepared");
+    // });
+
     let stream_map = stream_map.0.lock().unwrap();
     let av_bus = stream_map.get(&String::from("/foo")).unwrap();
     let video_rx = av_bus.video.lock().unwrap().add_rx();
     let audio_rx = av_bus.audio.lock().unwrap().add_rx();
-    link_appsrc_to_pad(&pipeline, "pay0", video_caps(), video_rx);
+    link_appsrc_to_pad(&pipeline, "pay0", video_caps(VideoType::VP9), video_rx);
     link_appsrc_to_pad(&pipeline, "pay1", audio_caps(), audio_rx);
     println!("done");
 }
@@ -80,8 +100,9 @@ pub fn start_server(stream_map: &StreamMap) {
     factory.connect_media_configure(move |_, media| {
         configure_media(&media, stream_map.clone());
     });
-    // factory.connect_media_constructed(|_, media| {
-    // });
+    factory.connect_media_constructed(|_, _media| {
+        println!("factory media constructed");
+    });
     factory.set_protocols(gst_rtsp::RTSPLowerTrans::TCP);
     mounts.add_factory("/test", &factory);
     server.attach(None);
