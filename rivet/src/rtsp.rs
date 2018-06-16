@@ -29,6 +29,7 @@ fn link_appsrc_to_pad(
                 let sample = rx_mutex.lock().unwrap().recv().unwrap();
                 // println!("got sample {:?}", sample.get_segment().unwrap());
                 let _ = appsrc.push_sample(&sample);
+                debug!("got it");
             })
             .build(),
     );
@@ -74,7 +75,7 @@ fn configure_media(media: &gst_rtsp_server::RTSPMedia, stream_map: StreamMap) {
     let av_bus = stream_map.get(&String::from("/foo")).unwrap();
     let video_rx = av_bus.video.lock().unwrap().add_rx();
     let audio_rx = av_bus.audio.lock().unwrap().add_rx();
-    link_appsrc_to_pad(&pipeline, "pay0", video_caps(VideoType::H264), video_rx);
+    link_appsrc_to_pad(&pipeline, "pay0", video_caps(), video_rx);
     link_appsrc_to_pad(&pipeline, "pay1", audio_caps(), audio_rx);
     println!("done");
 }

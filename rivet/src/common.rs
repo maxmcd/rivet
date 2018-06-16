@@ -56,13 +56,14 @@ impl WsConnInner {
 }
 
 pub enum VideoType {
-    VP9,
+    _VP9,
     H264,
 }
 
-pub fn video_caps(video_type: VideoType) -> gst::GstRc<gst::CapsRef> {
+pub fn video_caps() -> gst::GstRc<gst::CapsRef> {
+    let video_type = VideoType::H264;
     let values: &[(&str, &glib::ToSendValue)] = match video_type {
-        VideoType::VP9 => &[
+        VideoType::_VP9 => &[
             ("media", &"video"),
             ("encoding-name", &"VP8"),
             ("payload", &(96i32)),

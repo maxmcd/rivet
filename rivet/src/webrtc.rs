@@ -15,12 +15,18 @@ fn on_offer_created(promise: &gst::Promise, webrtc: gst::Element, sender: ws::Se
         .unwrap()
         .get::<gst_webrtc::WebRTCSessionDescription>()
         .expect("Invalid argument");
-    let mut sdp = offer.get_sdp();
-    sdp.add_attribute(
-        "fmtp",
-        "96 profile-level-id=42e01f;level-asymmetry-allowed=1;packetization-mode=1",
-    ).unwrap();
+    let sdp = offer.get_sdp();
     let sdp_text = sdp.as_text().unwrap();
+
+    // TODO: actually edit SDPMedia:
+    // gst_sdp_media_add_attribute(
+    //     (GstSDPMedia *)&g_array_index(offer->sdp->medias, GstSDPMedia, 0), "fmtp", "96 profile-level-id=42e01f;level-asymmetry-allowed=1;packetization-mode=1");
+    let sdp_text = sdp_text.replace(
+        "\r\na=rtpmap:96 H264/90000", 
+        "\r\na=rtpmap:96 H264/90000\r\na=fmtp:96 profile-level-id=42e01f;level-asymmetry-allowed=1;packetization-mode=1",
+    );
+
+    println!("{:?}", sdp_text);
 
     debug!("offer {}", sdp_text);
     webrtc
@@ -69,7 +75,7 @@ pub fn set_up_webrtc(ws_conn: &mut WsConnInner) -> Result<(), Error> {
             "add-transceiver",
             &[
                 &gst_webrtc::WebRTCRTPTransceiverDirection::Recvonly,
-                &video_caps(VideoType::H264),
+                &video_caps(),
             ],
         )
         .unwrap();
@@ -97,7 +103,7 @@ pub fn set_up_webrtc(ws_conn: &mut WsConnInner) -> Result<(), Error> {
     webrtc.connect_pad_added(move |_, pad| {
         let pad_name = pad.get_name();
         let (caps, bus) = if pad_name == "src_0" {
-            (video_caps(VideoType::H264), av_bus.video.clone())
+            (video_caps(), av_bus.video.clone())
         } else if pad_name == "src_1" {
             (audio_caps(), av_bus.audio.clone())
         } else {
